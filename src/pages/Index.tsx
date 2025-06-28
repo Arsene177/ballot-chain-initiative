@@ -4,8 +4,12 @@ import { Link } from 'react-router-dom';
 import { Shield, Users, Vote, BarChart3, Lock, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/hooks/useAuth';
+import UserMenu from '@/components/UserMenu';
 
 const Index = () => {
+  const { user } = useAuth();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Navigation */}
@@ -16,16 +20,30 @@ const Index = () => {
               <Shield className="h-8 w-8 text-blue-600" />
               <span className="text-xl font-bold text-gray-900">BallotChain</span>
             </div>
-            <div className="flex space-x-4">
-              <Link to="/admin">
-                <Button variant="outline">Admin Portal</Button>
-              </Link>
-              <Link to="/initiator">
-                <Button variant="outline">Create Vote</Button>
-              </Link>
-              <Link to="/voter">
-                <Button>Vote Now</Button>
-              </Link>
+            <div className="flex items-center space-x-4">
+              {user ? (
+                <>
+                  <Link to="/admin">
+                    <Button variant="outline">Admin Portal</Button>
+                  </Link>
+                  <Link to="/initiator">
+                    <Button variant="outline">Create Vote</Button>
+                  </Link>
+                  <Link to="/voter">
+                    <Button>Vote Now</Button>
+                  </Link>
+                  <UserMenu />
+                </>
+              ) : (
+                <>
+                  <Link to="/auth">
+                    <Button variant="outline">Sign In</Button>
+                  </Link>
+                  <Link to="/auth">
+                    <Button>Get Started</Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -43,16 +61,33 @@ const Index = () => {
             verifiable, and tamper-proof. Built for organizations, institutions, and communities.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/initiator">
-              <Button size="lg" className="w-full sm:w-auto">
-                Create Voting Session
-              </Button>
-            </Link>
-            <Link to="/voter">
-              <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                Cast Your Vote
-              </Button>
-            </Link>
+            {user ? (
+              <>
+                <Link to="/initiator">
+                  <Button size="lg" className="w-full sm:w-auto">
+                    Create Voting Session
+                  </Button>
+                </Link>
+                <Link to="/voter">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto">
+                    Cast Your Vote
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link to="/auth">
+                  <Button size="lg" className="w-full sm:w-auto">
+                    Get Started
+                  </Button>
+                </Link>
+                <Link to="/auth">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto">
+                    Sign In
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -121,8 +156,10 @@ const Index = () => {
                     Authorized ID database management
                   </li>
                 </ul>
-                <Link to="/admin" className="block mt-6">
-                  <Button className="w-full">Access Admin Portal</Button>
+                <Link to={user ? "/admin" : "/auth"} className="block mt-6">
+                  <Button className="w-full">
+                    {user ? "Access Admin Portal" : "Sign In to Continue"}
+                  </Button>
                 </Link>
               </CardContent>
             </Card>
@@ -147,8 +184,10 @@ const Index = () => {
                     View voting results
                   </li>
                 </ul>
-                <Link to="/initiator" className="block mt-6">
-                  <Button className="w-full bg-green-600 hover:bg-green-700">Create Vote</Button>
+                <Link to={user ? "/initiator" : "/auth"} className="block mt-6">
+                  <Button className="w-full bg-green-600 hover:bg-green-700">
+                    {user ? "Create Vote" : "Sign In to Continue"}
+                  </Button>
                 </Link>
               </CardContent>
             </Card>
@@ -173,8 +212,10 @@ const Index = () => {
                     Blockchain confirmation
                   </li>
                 </ul>
-                <Link to="/voter" className="block mt-6">
-                  <Button className="w-full bg-purple-600 hover:bg-purple-700">Cast Vote</Button>
+                <Link to={user ? "/voter" : "/auth"} className="block mt-6">
+                  <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                    {user ? "Cast Vote" : "Sign In to Continue"}
+                  </Button>
                 </Link>
               </CardContent>
             </Card>
