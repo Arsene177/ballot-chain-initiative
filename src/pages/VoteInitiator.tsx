@@ -210,52 +210,8 @@ const VoteInitiator = () => {
         {/* Current Sessions */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Your Voting Sessions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-green-200">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">University President Election</CardTitle>
-                  <Badge className="bg-green-100 text-green-700">Active</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 mb-4">Choose the next student body president</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Total Votes:</span>
-                    <span className="font-medium">1,247</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Ends:</span>
-                    <span className="font-medium">Dec 15, 2024</span>
-                  </div>
-                </div>
-                <Button className="w-full mt-4" size="sm">View Results</Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-blue-200">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">Budget Allocation Vote</CardTitle>
-                  <Badge variant="outline">Scheduled</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 mb-4">Decide on next year's budget priorities</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Starts:</span>
-                    <span className="font-medium">Jan 10, 2025</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Duration:</span>
-                    <span className="font-medium">7 days</span>
-                  </div>
-                </div>
-                <Button variant="outline" className="w-full mt-4" size="sm">Edit Session</Button>
-              </CardContent>
-            </Card>
+          <div className="text-center py-8 text-gray-500">
+            <p>No voting sessions created yet. Create your first session below.</p>
           </div>
         </div>
 
