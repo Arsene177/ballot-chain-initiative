@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, ArrowLeft, Plus, Calendar, Users, Settings, Eye } from 'lucide-react';
+import { Shield, ArrowLeft, Plus, Calendar, Users, Settings, Eye, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,122 @@ interface VotingSessionForm {
   accessType: 'public' | 'organization' | 'restricted';
   idVerificationType: 'employee' | 'student' | 'staff' | 'custom';
 }
+
+interface UserSession {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  start_time: string;
+  end_time: string;
+  created_at: string;
+}
+
+const UserVotingSessions = () => {
+  const { user } = useAuth();
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const fetchUserSessions = async () => {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('voting_sessions')
+          .select('*')
+          .eq('creator_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setSessions(data || []);
+
+        // Fetch vote counts for each session
+        if (data) {
+          const counts: Record<string, number> = {};
+          for (const session of data) {
+            const { count } = await supabase
+              .from('votes')
+              .select('*', { count: 'exact' })
+              .eq('voting_session_id', session.id);
+            counts[session.id] = count || 0;
+          }
+          setVoteCounts(counts);
+        }
+      } catch (error) {
+        console.error('Error fetching user sessions:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserSessions();
+  }, [user]);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'bg-green-100 text-green-700';
+      case 'draft': return 'bg-gray-100 text-gray-700';
+      case 'scheduled': return 'bg-blue-100 text-blue-700';
+      case 'ended': return 'bg-red-100 text-red-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-2">Loading your sessions...</p>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <p>No voting sessions created yet. Create your first session below.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {sessions.map((session) => (
+        <Card key={session.id} className="border-green-200">
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <CardTitle className="text-lg">{session.title}</CardTitle>
+              <Badge className={getStatusColor(session.status)}>
+                {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-600 mb-4">{session.description}</p>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Total Votes:</span>
+                <span className="font-medium">{voteCounts[session.id] || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Ends:</span>
+                <span className="font-medium">
+                  {new Date(session.end_time).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+            <Button className="w-full mt-4" size="sm">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              View Results
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+};
 
 const VoteInitiator = () => {
   const { user } = useAuth();
@@ -210,9 +326,7 @@ const VoteInitiator = () => {
         {/* Current Sessions */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Your Voting Sessions</h2>
-          <div className="text-center py-8 text-gray-500">
-            <p>No voting sessions created yet. Create your first session below.</p>
-          </div>
+          <UserVotingSessions />
         </div>
 
         {/* Create New Session */}
