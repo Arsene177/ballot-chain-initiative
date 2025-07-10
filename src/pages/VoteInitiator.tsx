@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Shield, ArrowLeft, Plus, Calendar, Users, Settings, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,9 +10,34 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+
+interface VotingSessionForm {
+  title: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+  accessType: 'public' | 'organization' | 'restricted';
+  idVerificationType: 'employee' | 'student' | 'staff' | 'custom';
+}
 
 const VoteInitiator = () => {
-  const [candidates, setCandidates] = React.useState(['']);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  const [candidates, setCandidates] = useState(['']);
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState<VotingSessionForm>({
+    title: '',
+    description: '',
+    startTime: '',
+    endTime: '',
+    accessType: 'public',
+    idVerificationType: 'employee'
+  });
 
   const addCandidate = () => {
     setCandidates([...candidates, '']);
@@ -23,6 +48,141 @@ const VoteInitiator = () => {
     updated[index] = value;
     setCandidates(updated);
   };
+
+  const removeCandidateIfEmpty = (index: number) => {
+    if (candidates[index] === '' && candidates.length > 1) {
+      const updated = candidates.filter((_, i) => i !== index);
+      setCandidates(updated);
+    }
+  };
+
+  const handleInputChange = (field: keyof VotingSessionForm, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const validateForm = () => {
+    if (!formData.title.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a voting title",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    if (!formData.startTime || !formData.endTime) {
+      toast({
+        title: "Validation Error", 
+        description: "Please set both start and end times",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    if (new Date(formData.startTime) >= new Date(formData.endTime)) {
+      toast({
+        title: "Validation Error",
+        description: "End time must be after start time",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    const validCandidates = candidates.filter(c => c.trim() !== '');
+    if (validCandidates.length < 2) {
+      toast({
+        title: "Validation Error",
+        description: "Please add at least 2 candidates",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const createVotingSession = async (isDraft: boolean = false) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to create a voting session",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+
+    try {
+      // Create voting session
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('voting_sessions')
+        .insert([
+          {
+            title: formData.title,
+            description: formData.description,
+            creator_id: user.id,
+            access_type: formData.accessType,
+            id_verification_type: formData.idVerificationType,
+            start_time: formData.startTime,
+            end_time: formData.endTime,
+            status: isDraft ? 'draft' : 'scheduled'
+          }
+        ])
+        .select()
+        .single();
+
+      if (sessionError) throw sessionError;
+
+      // Add candidates
+      const validCandidates = candidates.filter(c => c.trim() !== '');
+      const candidatesData = validCandidates.map((name, index) => ({
+        voting_session_id: sessionData.id,
+        name: name.trim(),
+        position: index + 1
+      }));
+
+      const { error: candidatesError } = await supabase
+        .from('candidates')
+        .insert(candidatesData);
+
+      if (candidatesError) throw candidatesError;
+
+      toast({
+        title: "Success!",
+        description: `Voting session ${isDraft ? 'saved as draft' : 'created'} successfully`,
+      });
+
+      // Reset form
+      setFormData({
+        title: '',
+        description: '',
+        startTime: '',
+        endTime: '',
+        accessType: 'public',
+        idVerificationType: 'employee'
+      });
+      setCandidates(['']);
+
+    } catch (error) {
+      console.error('Error creating voting session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create voting session. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateSession = () => createVotingSession(false);
+  const handleSaveDraft = () => createVotingSession(true);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -112,7 +272,12 @@ const VoteInitiator = () => {
             <div className="space-y-4">
               <div>
                 <Label htmlFor="title">Voting Title</Label>
-                <Input id="title" placeholder="Enter the voting session title" />
+                <Input 
+                  id="title" 
+                  placeholder="Enter the voting session title"
+                  value={formData.title}
+                  onChange={(e) => handleInputChange('title', e.target.value)}
+                />
               </div>
               <div>
                 <Label htmlFor="description">Description</Label>
@@ -120,6 +285,8 @@ const VoteInitiator = () => {
                   id="description" 
                   placeholder="Provide details about what voters are deciding on"
                   rows={3}
+                  value={formData.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
                 />
               </div>
             </div>
@@ -135,6 +302,7 @@ const VoteInitiator = () => {
                     placeholder={`Candidate ${index + 1}`}
                     value={candidate}
                     onChange={(e) => updateCandidate(index, e.target.value)}
+                    onBlur={() => removeCandidateIfEmpty(index)}
                   />
                   {index === candidates.length - 1 && (
                     <Button type="button" onClick={addCandidate} variant="outline">
@@ -151,11 +319,21 @@ const VoteInitiator = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="start-date">Start Date & Time</Label>
-                <Input id="start-date" type="datetime-local" />
+                <Input 
+                  id="start-date" 
+                  type="datetime-local"
+                  value={formData.startTime}
+                  onChange={(e) => handleInputChange('startTime', e.target.value)}
+                />
               </div>
               <div>
                 <Label htmlFor="end-date">End Date & Time</Label>
-                <Input id="end-date" type="datetime-local" />
+                <Input 
+                  id="end-date" 
+                  type="datetime-local"
+                  value={formData.endTime}
+                  onChange={(e) => handleInputChange('endTime', e.target.value)}
+                />
               </div>
             </div>
 
@@ -171,7 +349,7 @@ const VoteInitiator = () => {
               <div className="space-y-3">
                 <div>
                   <Label htmlFor="voting-type">Voting Access</Label>
-                  <Select>
+                  <Select value={formData.accessType} onValueChange={(value) => handleInputChange('accessType', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select voting access type" />
                     </SelectTrigger>
@@ -185,7 +363,7 @@ const VoteInitiator = () => {
 
                 <div>
                   <Label htmlFor="id-type">ID Verification Type</Label>
-                  <Select>
+                  <Select value={formData.idVerificationType} onValueChange={(value) => handleInputChange('idVerificationType', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select ID type for verification" />
                     </SelectTrigger>
@@ -218,8 +396,21 @@ const VoteInitiator = () => {
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button className="flex-1">Create Voting Session</Button>
-              <Button variant="outline" className="flex-1">Save as Draft</Button>
+              <Button 
+                className="flex-1" 
+                onClick={handleCreateSession}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Creating...' : 'Create Voting Session'}
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={handleSaveDraft}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Saving...' : 'Save as Draft'}
+              </Button>
             </div>
           </CardContent>
         </Card>
