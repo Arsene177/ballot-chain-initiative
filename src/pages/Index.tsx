@@ -29,6 +29,9 @@ const Index = () => {
                   <Link to="/initiator">
                     <Button variant="outline">Create Vote</Button>
                   </Link>
+                  <Link to="/sessions">
+                    <Button variant="outline">View Sessions</Button>
+                  </Link>
                   <Link to="/voter">
                     <Button>Vote Now</Button>
                   </Link>
@@ -36,6 +39,9 @@ const Index = () => {
                 </>
               ) : (
                 <>
+                  <Link to="/sessions">
+                    <Button variant="outline">View Sessions</Button>
+                  </Link>
                   <Link to="/auth">
                     <Button variant="outline">Sign In</Button>
                   </Link>
@@ -68,22 +74,27 @@ const Index = () => {
                     Create Voting Session
                   </Button>
                 </Link>
-                <Link to="/voter">
+                <Link to="/sessions">
                   <Button variant="outline" size="lg" className="w-full sm:w-auto">
+                    View Public Sessions
+                  </Button>
+                </Link>
+                <Link to="/voter">
+                  <Button size="lg" className="w-full sm:w-auto">
                     Cast Your Vote
                   </Button>
                 </Link>
               </>
             ) : (
               <>
-                <Link to="/auth">
+                <Link to="/sessions">
                   <Button size="lg" className="w-full sm:w-auto">
-                    Get Started
+                    View Public Sessions
                   </Button>
                 </Link>
                 <Link to="/auth">
                   <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                    Sign In
+                    Get Started
                   </Button>
                 </Link>
               </>

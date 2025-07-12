@@ -1,15 +1,194 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, ArrowLeft, Users, Vote, BarChart3, Eye, EyeOff, Database, Activity } from 'lucide-react';
+import { Shield, ArrowLeft, Users, Vote, BarChart3, Eye, EyeOff, Database, Activity, Upload, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const AdminDashboard = () => {
+  const { toast } = useToast();
   const [voterVisibility, setVoterVisibility] = React.useState(false);
+  const [uploadFile, setUploadFile] = React.useState<File | null>(null);
+  const [stats, setStats] = React.useState({
+    totalSessions: 0,
+    totalVotes: 0,
+    activeParticipants: 0,
+    blockchainConfirmations: 99.9
+  });
 
+  React.useEffect(() => {
+    fetchStats();
+    fetchSystemSettings();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      // Fetch total sessions
+      const { count: sessionsCount } = await supabase
+        .from('voting_sessions')
+        .select('*', { count: 'exact' });
+
+      // Fetch total votes
+      const { count: votesCount } = await supabase
+        .from('votes')
+        .select('*', { count: 'exact' });
+
+      // Fetch unique voters (participants)
+      const { data: uniqueVoters } = await supabase
+        .from('votes')
+        .select('voter_id')
+        .not('voter_id', 'is', null);
+
+      const uniqueParticipants = new Set(uniqueVoters?.map(v => v.voter_id)).size;
+
+      setStats({
+        totalSessions: sessionsCount || 0,
+        totalVotes: votesCount || 0,
+        activeParticipants: uniqueParticipants,
+        blockchainConfirmations: 99.9
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  const fetchSystemSettings = async () => {
+    try {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'voter_identity_visible')
+        .single();
+
+      if (data) {
+        setVoterVisibility(data.setting_value === 'true');
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
+  const updateVoterVisibility = async (visible: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('system_settings')
+        .upsert({
+          setting_key: 'voter_identity_visible',
+          setting_value: visible.toString()
+        });
+
+      if (error) throw error;
+
+      setVoterVisibility(visible);
+      toast({
+        title: "Settings Updated",
+        description: `Voter identity visibility ${visible ? 'enabled' : 'disabled'}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update settings",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (!uploadFile) {
+      toast({
+        title: "No File Selected",
+        description: "Please select a CSV file to upload",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const text = await uploadFile.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',').map(h => h.trim());
+      
+      if (!headers.includes('id_type') || !headers.includes('id_value')) {
+        throw new Error('CSV must contain id_type and id_value columns');
+      }
+
+      const records = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim());
+        const record: any = {};
+        headers.forEach((header, index) => {
+          record[header] = values[index];
+        });
+        return {
+          id_type: record.id_type,
+          id_value: record.id_value,
+          organization_id: record.organization_id || null,
+          is_active: true
+        };
+      });
+
+      const { error } = await supabase
+        .from('authorized_ids')
+        .upsert(records);
+
+      if (error) throw error;
+
+      toast({
+        title: "Upload Successful",
+        description: `Imported ${records.length} ID records`,
+      });
+      
+      setUploadFile(null);
+    } catch (error: any) {
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to process CSV file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const exportIds = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('authorized_ids')
+        .select('*')
+        .eq('is_active', true);
+
+      if (error) throw error;
+
+      const csv = [
+        'id_type,id_value,organization_id,created_at',
+        ...(data || []).map(record => 
+          `${record.id_type},${record.id_value},${record.organization_id || ''},${record.created_at}`
+        )
+      ].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'authorized_ids.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export Successful",
+        description: "ID database exported successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export ID database",
+        variant: "destructive",
+      });
+    }
+  };
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -45,6 +224,10 @@ const AdminDashboard = () => {
               <CardContent>
                 <div className="text-2xl font-bold">1,247</div>
                 <p className="text-xs text-muted-foreground">+12% from last month</p>
+                <div className="text-2xl font-bold">{stats.totalSessions}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.totalSessions > 0 ? '+12% from last month' : 'No sessions yet'}
+                </p>
               </CardContent>
             </Card>
 
@@ -56,6 +239,10 @@ const AdminDashboard = () => {
               <CardContent>
                 <div className="text-2xl font-bold">45,231</div>
                 <p className="text-xs text-muted-foreground">+8% from last month</p>
+                <div className="text-2xl font-bold">{stats.totalVotes.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.totalVotes > 0 ? '+8% from last month' : 'No votes cast yet'}
+                </p>
               </CardContent>
             </Card>
 
@@ -67,6 +254,10 @@ const AdminDashboard = () => {
               <CardContent>
                 <div className="text-2xl font-bold">12,847</div>
                 <p className="text-xs text-muted-foreground">+15% from last month</p>
+                <div className="text-2xl font-bold">{stats.activeParticipants.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.activeParticipants > 0 ? '+15% from last month' : 'No participants yet'}
+                </p>
               </CardContent>
             </Card>
 
@@ -77,6 +268,8 @@ const AdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">99.9%</div>
+                <p className="text-xs text-muted-foreground">System reliability</p>
+                <div className="text-2xl font-bold">{stats.blockchainConfirmations}%</div>
                 <p className="text-xs text-muted-foreground">System reliability</p>
               </CardContent>
             </Card>
@@ -103,7 +296,7 @@ const AdminDashboard = () => {
                 </div>
                 <Switch 
                   checked={voterVisibility}
-                  onCheckedChange={setVoterVisibility}
+                  onCheckedChange={updateVoterVisibility}
                 />
               </div>
               <div className="pt-4 border-t">
@@ -172,10 +365,35 @@ const AdminDashboard = () => {
                   <p className="text-sm text-gray-600">Active records</p>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button className="flex-1">Import ID Database</Button>
-                <Button variant="outline" className="flex-1">Export Records</Button>
+              
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="csv-upload">Upload ID Database (CSV)</Label>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      id="csv-upload"
+                      type="file"
+                      accept=".csv"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      className="flex-1"
+                    />
+                    <Button onClick={handleFileUpload} disabled={!uploadFile}>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    CSV format: id_type, id_value, organization_id (optional)
+                  </p>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button variant="outline" className="flex-1" onClick={exportIds}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Records
+                  </Button>
                 <Button variant="outline" className="flex-1">Manage Access</Button>
+                </div>
               </div>
             </div>
           </CardContent>

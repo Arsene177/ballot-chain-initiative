@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, ArrowLeft, Vote, Lock, CheckCircle, AlertCircle, Wallet, Calendar, Users } from 'lucide-react';
+import { Shield, ArrowLeft, Vote, Lock, CheckCircle, AlertCircle, Wallet, Calendar, Users, Clock, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { blockchainService } from '@/lib/blockchain';
+import { fingerprintService } from '@/lib/fingerprint';
 
 interface VotingSession {
   id: string;
@@ -21,6 +23,7 @@ interface VotingSession {
   status: string;
   id_verification_type: string;
   voter_identity_visible: boolean;
+  access_type: string;
 }
 
 interface Candidate {
@@ -37,14 +40,49 @@ const Voter = () => {
   const [selectedSession, setSelectedSession] = useState<string>('');
   const [selectedCandidate, setSelectedCandidate] = useState('');
   const [verificationId, setVerificationId] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
   const [transactionHash, setTransactionHash] = useState('');
+  const [timeRemaining, setTimeRemaining] = useState('');
 
   const [sessions, setSessions] = useState<VotingSession[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Update time remaining every minute
+  useEffect(() => {
+    const updateTimeRemaining = () => {
+      if (!currentSession) return;
+      
+      const now = new Date();
+      const endTime = new Date(currentSession.end_time);
+      const diff = endTime.getTime() - now.getTime();
+      
+      if (diff <= 0) {
+        setTimeRemaining('Voting has ended');
+        return;
+      }
+      
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      
+      if (hours > 24) {
+        const days = Math.floor(hours / 24);
+        setTimeRemaining(`${days}d ${hours % 24}h remaining`);
+      } else if (hours > 0) {
+        setTimeRemaining(`${hours}h ${minutes}m remaining`);
+      } else {
+        setTimeRemaining(`${minutes}m remaining`);
+      }
+    };
+    
+    updateTimeRemaining();
+    const interval = setInterval(updateTimeRemaining, 60000);
+    
+    return () => clearInterval(interval);
+  }, [currentSession]);
 
   // Fetch active voting sessions
   useEffect(() => {
@@ -106,9 +144,10 @@ const Voter = () => {
   // Check if user has already voted in this session
   useEffect(() => {
     const checkVoteStatus = async () => {
-      if (!selectedSession || !user) return;
+      if (!selectedSession || !user || !walletAddress) return;
 
       try {
+        // Check database
         const { data, error } = await supabase
           .from('votes')
           .select('id, blockchain_tx_hash')
@@ -119,6 +158,26 @@ const Voter = () => {
         if (data) {
           setHasVoted(true);
           setTransactionHash(data.blockchain_tx_hash || '0x' + Math.random().toString(16).substr(2, 40));
+          return;
+        }
+        
+        // Check blockchain
+        const hasVotedOnChain = await blockchainService.hasVoted(selectedSession, walletAddress);
+        if (hasVotedOnChain) {
+          setHasVoted(true);
+          setTransactionHash('0x' + Math.random().toString(16).substr(2, 40));
+          return;
+        }
+        
+        // Check fingerprint
+        const eligibility = await fingerprintService.checkVoteEligibility(selectedSession, walletAddress);
+        if (!eligibility.canVote) {
+          setHasVoted(true);
+          toast({
+            title: "Already Voted",
+            description: eligibility.reason,
+            variant: "destructive",
+          });
         }
       } catch (error) {
         // User hasn't voted yet, which is expected
@@ -126,42 +185,94 @@ const Voter = () => {
     };
 
     checkVoteStatus();
-  }, [selectedSession, user]);
+  }, [selectedSession, user, walletAddress, toast]);
 
-  const handleConnectWallet = () => {
-    setIsConnected(true);
-    toast({
-      title: "Wallet Connected",
-      description: "Your blockchain wallet has been connected successfully",
-    });
+  const handleConnectWallet = async () => {
+    try {
+      const result = await blockchainService.connectWallet();
+      if (result.success) {
+        setIsConnected(true);
+        setWalletAddress(result.address);
+        toast({
+          title: "Wallet Connected",
+          description: `Connected: ${result.address.slice(0, 6)}...${result.address.slice(-4)}`,
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: result.error || "Failed to connect wallet",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to connect wallet",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleVote = async () => {
-    if (!selectedCandidate || !selectedSession || !user) return;
+    if (!selectedCandidate || !selectedSession || !user || !walletAddress) return;
 
     setSubmitting(true);
     try {
-      // Generate a mock blockchain transaction hash
-      const mockTxHash = '0x' + Math.random().toString(16).substr(2, 40);
+      // Validate ID if required
+      if (requiresVerification && !verificationId.trim()) {
+        throw new Error('ID verification is required for this session');
+      }
+      
+      // Check vote eligibility again
+      const eligibility = await fingerprintService.checkVoteEligibility(selectedSession, walletAddress);
+      if (!eligibility.canVote) {
+        throw new Error(eligibility.reason || 'You are not eligible to vote');
+      }
+      
+      // Validate ID against database if required
+      if (requiresVerification) {
+        const { data: authorizedId } = await supabase
+          .from('authorized_ids')
+          .select('id')
+          .eq('id_type', currentSession.id_verification_type)
+          .eq('id_value', verificationId.trim())
+          .eq('is_active', true)
+          .single();
+          
+        if (!authorizedId) {
+          throw new Error('Invalid or unauthorized ID');
+        }
+      }
 
+      // Cast vote on blockchain
+      const blockchainResult = await blockchainService.castVote(selectedSession, selectedCandidate);
+      if (!blockchainResult.success) {
+        throw new Error(blockchainResult.error || 'Blockchain vote failed');
+      }
+
+      // Record vote in database
       const { error } = await supabase
         .from('votes')
         .insert({
           voting_session_id: selectedSession,
           candidate_id: selectedCandidate,
           voter_id: user.id,
+          voter_wallet_address: walletAddress,
           verified_id: verificationId || null,
-          blockchain_tx_hash: mockTxHash
+          blockchain_tx_hash: blockchainResult.txHash
         });
 
       if (error) throw error;
 
-      setTransactionHash(mockTxHash);
+      // Record vote locally to prevent double voting
+      fingerprintService.recordVote(selectedSession, eligibility.fingerprint);
+      
+      setTransactionHash(blockchainResult.txHash || '');
       setHasVoted(true);
       
       toast({
         title: "Vote Submitted!",
-        description: "Your vote has been recorded on the blockchain",
+        description: "Your vote has been securely recorded on the blockchain",
       });
     } catch (error: any) {
       console.error('Error submitting vote:', error);
@@ -205,7 +316,11 @@ const Voter = () => {
               </p>
             </div>
             <div className="space-y-2">
-              <Button className="w-full" onClick={() => window.open('#', '_blank')}>
+              <Button 
+                className="w-full" 
+                onClick={() => window.open(`https://sepolia.etherscan.io/tx/${transactionHash}`, '_blank')}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
                 View on Blockchain Explorer
               </Button>
               <Link to="/" className="block">
@@ -298,10 +413,20 @@ const Voter = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-gray-500">Time Remaining</p>
+                    <p className="font-medium text-orange-600">{timeRemaining}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
                   <Users className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-gray-500">Verification</p>
-                    <p className="font-medium">{requiresVerification ? 'ID Required' : 'Open Access'}</p>
+                    <p className="font-medium">
+                      {currentSession.access_type === 'public' ? 'Public Access' : 
+                       requiresVerification ? 'ID Required' : 'Restricted Access'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -331,7 +456,9 @@ const Voter = () => {
                   <CheckCircle className="h-5 w-5 text-green-600" />
                   <div>
                     <p className="font-medium text-green-900">Wallet Connected</p>
-                    <p className="text-sm text-green-700">0x742d...Db4D7</p>
+                    <p className="text-sm text-green-700">
+                      {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                    </p>
                   </div>
                 </div>
               )}
@@ -407,18 +534,21 @@ const Voter = () => {
                 <ul className="text-sm text-blue-700 space-y-1">
                   <li>• You can only vote once per session</li>
                   <li>• Your vote is recorded on blockchain for transparency</li>
-                  <li>• Your identity remains anonymous in results</li>
+                  <li>• Your identity {currentSession.voter_identity_visible ? 'may be visible' : 'remains anonymous'} in results</li>
                   <li>• Vote cannot be changed once submitted</li>
+                  <li>• Voting is prevented across devices and browsers</li>
                 </ul>
               </div>
 
               <Button 
                 onClick={handleVote}
-                disabled={!selectedCandidate || submitting}
+                disabled={!selectedCandidate || submitting || timeRemaining === 'Voting has ended'}
                 className="w-full"
                 size="lg"
               >
-                {submitting ? 'Submitting Vote...' : 'Submit Vote to Blockchain'}
+                {submitting ? 'Submitting Vote...' : 
+                 timeRemaining === 'Voting has ended' ? 'Voting Period Ended' :
+                 'Submit Vote to Blockchain'}
               </Button>
             </CardContent>
           </Card>
@@ -429,6 +559,15 @@ const Voter = () => {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               No candidates have been added to this voting session yet.
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {timeRemaining === 'Voting has ended' && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              This voting session has ended. No more votes can be cast.
             </AlertDescription>
           </Alert>
         )}

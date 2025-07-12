@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, ArrowLeft, Plus, Calendar, Users, Settings, Eye, BarChart3 } from 'lucide-react';
+import { Shield, ArrowLeft, Plus, Calendar, Users, Settings, Eye, BarChart3, Clock, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,6 +22,7 @@ interface VotingSessionForm {
   endTime: string;
   accessType: 'public' | 'organization' | 'restricted';
   idVerificationType: 'employee' | 'student' | 'staff' | 'custom';
+  voterIdentityVisible: boolean;
 }
 
 interface UserSession {
@@ -152,7 +154,8 @@ const VoteInitiator = () => {
     startTime: '',
     endTime: '',
     accessType: 'public',
-    idVerificationType: 'employee'
+    idVerificationType: 'employee',
+    voterIdentityVisible: false
   });
 
   const addCandidate = () => {
@@ -179,6 +182,12 @@ const VoteInitiator = () => {
     }));
   };
 
+  const handleSwitchChange = (field: keyof VotingSessionForm, value: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
   const validateForm = () => {
     if (!formData.title.trim()) {
       toast({
@@ -245,9 +254,10 @@ const VoteInitiator = () => {
             creator_id: user.id,
             access_type: formData.accessType,
             id_verification_type: formData.idVerificationType,
+            voter_identity_visible: formData.voterIdentityVisible,
             start_time: formData.startTime,
             end_time: formData.endTime,
-            status: isDraft ? 'draft' : 'scheduled'
+            status: isDraft ? 'draft' : (new Date(formData.startTime) <= new Date() ? 'active' : 'scheduled')
           }
         ])
         .select()
@@ -281,7 +291,8 @@ const VoteInitiator = () => {
         startTime: '',
         endTime: '',
         accessType: 'public',
-        idVerificationType: 'employee'
+        idVerificationType: 'employee',
+        voterIdentityVisible: false
       });
       setCandidates(['']);
 
@@ -431,7 +442,8 @@ const VoteInitiator = () => {
                   </Select>
                 </div>
 
-                <div>
+                {formData.accessType !== 'public' && (
+                  <div>
                   <Label htmlFor="id-type">ID Verification Type</Label>
                   <Select value={formData.idVerificationType} onValueChange={(value) => handleInputChange('idVerificationType', value)}>
                     <SelectTrigger>
@@ -444,6 +456,19 @@ const VoteInitiator = () => {
                       <SelectItem value="custom">Custom ID List</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                )}
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="voter-identity">Voter Identity Visibility</Label>
+                    <p className="text-sm text-gray-600">Allow viewing voter identities in results</p>
+                  </div>
+                  <Switch
+                    id="voter-identity"
+                    checked={formData.voterIdentityVisible}
+                    onCheckedChange={(value) => handleSwitchChange('voterIdentityVisible', value)}
+                  />
                 </div>
               </div>
             </div>
@@ -459,8 +484,10 @@ const VoteInitiator = () => {
               <div className="text-sm text-blue-700 space-y-1">
                 <p>• Votes will be recorded on blockchain for transparency</p>
                 <p>• Each wallet address limited to one vote per session</p>
+                <p>• Cross-device voting prevention enabled</p>
                 <p>• Results will be visible to you after voting ends</p>
-                <p>• Voter identities protected unless admin enables visibility</p>
+                <p>• Voter identities {formData.voterIdentityVisible ? 'will be visible' : 'will remain anonymous'}</p>
+                <p>• Access type: {formData.accessType === 'public' ? 'Anyone can vote' : 'ID verification required'}</p>
               </div>
             </div>
 

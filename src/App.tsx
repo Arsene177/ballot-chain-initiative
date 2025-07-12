@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import PublicSessions from "./pages/PublicSessions";
 import AdminDashboard from "./pages/AdminDashboard";
 import VoteInitiator from "./pages/VoteInitiator";
 import Voter from "./pages/Voter";
@@ -24,6 +25,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/sessions" element={<PublicSessions />} />
             <Route 
               path="/auth" 
               element={
