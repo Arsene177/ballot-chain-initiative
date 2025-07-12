@@ -19,7 +19,7 @@ export class FingerprintService {
       this.getCanvasFingerprint(),
       this.getWebGLFingerprint(),
       navigator.hardwareConcurrency || 'unknown',
-      navigator.deviceMemory || 'unknown'
+      (navigator as any).deviceMemory || 'unknown'
     ];
 
     const fingerprint = components.join('|');
@@ -57,8 +57,9 @@ export class FingerprintService {
       const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
       if (!gl) return 'no-webgl';
       
-      const renderer = gl.getParameter(gl.RENDERER);
-      const vendor = gl.getParameter(gl.VENDOR);
+      const glContext = gl as WebGLRenderingContext;
+      const renderer = glContext.getParameter(glContext.RENDERER);
+      const vendor = glContext.getParameter(glContext.VENDOR);
       
       return `${vendor}|${renderer}`.slice(-30);
     } catch {

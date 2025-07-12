@@ -48,23 +48,28 @@ const UserVotingSessions = () => {
       try {
         const { data, error } = await supabase
           .from('voting_sessions')
-          .select('*')
+          .select('id, title, description, status, start_time, end_time, created_at')
           .eq('creator_id', user.id)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
         setSessions(data || []);
 
-        // Fetch vote counts for each session
-        if (data) {
-          const counts: Record<string, number> = {};
-          for (const session of data) {
+        // Fetch vote counts for each session in parallel
+        if (data?.length > 0) {
+          const countPromises = data.map(async (session) => {
             const { count } = await supabase
               .from('votes')
-              .select('*', { count: 'exact' })
+              .select('*', { count: 'exact', head: true })
               .eq('voting_session_id', session.id);
-            counts[session.id] = count || 0;
-          }
+            return { sessionId: session.id, count: count || 0 };
+          });
+
+          const results = await Promise.all(countPromises);
+          const counts: Record<string, number> = {};
+          results.forEach(({ sessionId, count }) => {
+            counts[sessionId] = count;
+          });
           setVoteCounts(counts);
         }
       } catch (error) {
@@ -75,7 +80,7 @@ const UserVotingSessions = () => {
     };
 
     fetchUserSessions();
-  }, [user]);
+  }, [user?.id]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

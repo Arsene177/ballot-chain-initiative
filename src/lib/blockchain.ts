@@ -28,11 +28,11 @@ export class BlockchainService {
 
   async connectWallet(): Promise<{ address: string; success: boolean; error?: string }> {
     try {
-      if (!window.ethereum) {
+      if (!(window as any).ethereum) {
         return { address: '', success: false, error: 'MetaMask not installed' };
       }
 
-      this.provider = new ethers.BrowserProvider(window.ethereum);
+      this.provider = new ethers.BrowserProvider((window as any).ethereum);
       await this.provider.send("eth_requestAccounts", []);
       this.signer = await this.provider.getSigner();
       const address = await this.signer.getAddress();

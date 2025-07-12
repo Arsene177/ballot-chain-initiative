@@ -51,11 +51,13 @@ const Voter = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  const currentSession = sessions.find(s => s.id === selectedSession);
+
   // Update time remaining every minute
   useEffect(() => {
+    if (!currentSession) return;
+
     const updateTimeRemaining = () => {
-      if (!currentSession) return;
-      
       const now = new Date();
       const endTime = new Date(currentSession.end_time);
       const diff = endTime.getTime() - now.getTime();
@@ -82,7 +84,7 @@ const Voter = () => {
     const interval = setInterval(updateTimeRemaining, 60000);
     
     return () => clearInterval(interval);
-  }, [currentSession]);
+  }, [currentSession?.id, currentSession?.end_time]);
 
   // Fetch active voting sessions
   useEffect(() => {
@@ -90,7 +92,7 @@ const Voter = () => {
       try {
         const { data, error } = await supabase
           .from('voting_sessions')
-          .select('*')
+          .select('id, title, description, end_time, status, id_verification_type, voter_identity_visible, access_type')
           .eq('status', 'active')
           .order('created_at', { ascending: false });
 
@@ -113,16 +115,16 @@ const Voter = () => {
 
   // Fetch candidates for selected session
   useEffect(() => {
-    const fetchCandidates = async () => {
-      if (!selectedSession) {
-        setCandidates([]);
-        return;
-      }
+    if (!selectedSession) {
+      setCandidates([]);
+      return;
+    }
 
+    const fetchCandidates = async () => {
       try {
         const { data, error } = await supabase
           .from('candidates')
-          .select('*')
+          .select('id, name, description, position')
           .eq('voting_session_id', selectedSession)
           .order('position');
 
@@ -143,41 +145,42 @@ const Voter = () => {
 
   // Check if user has already voted in this session
   useEffect(() => {
-    const checkVoteStatus = async () => {
-      if (!selectedSession || !user || !walletAddress) return;
+    if (!selectedSession || !user) return;
 
+    const checkVoteStatus = async () => {
       try {
-        // Check database
-        const { data, error } = await supabase
+        // Check database first for faster response
+        const { data } = await supabase
           .from('votes')
-          .select('id, blockchain_tx_hash')
+          .select('blockchain_tx_hash')
           .eq('voting_session_id', selectedSession)
           .eq('voter_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (data) {
           setHasVoted(true);
           setTransactionHash(data.blockchain_tx_hash || '0x' + Math.random().toString(16).substr(2, 40));
           return;
         }
-        
-        // Check blockchain
-        const hasVotedOnChain = await blockchainService.hasVoted(selectedSession, walletAddress);
-        if (hasVotedOnChain) {
-          setHasVoted(true);
-          setTransactionHash('0x' + Math.random().toString(16).substr(2, 40));
-          return;
-        }
-        
-        // Check fingerprint
-        const eligibility = await fingerprintService.checkVoteEligibility(selectedSession, walletAddress);
-        if (!eligibility.canVote) {
-          setHasVoted(true);
-          toast({
-            title: "Already Voted",
-            description: eligibility.reason,
-            variant: "destructive",
-          });
+
+        // Only check blockchain and fingerprint if wallet is connected
+        if (walletAddress) {
+          const hasVotedOnChain = await blockchainService.hasVoted(selectedSession, walletAddress);
+          if (hasVotedOnChain) {
+            setHasVoted(true);
+            setTransactionHash('0x' + Math.random().toString(16).substr(2, 40));
+            return;
+          }
+          
+          const eligibility = await fingerprintService.checkVoteEligibility(selectedSession, walletAddress);
+          if (!eligibility.canVote) {
+            setHasVoted(true);
+            toast({
+              title: "Already Voted",
+              description: eligibility.reason,
+              variant: "destructive",
+            });
+          }
         }
       } catch (error) {
         // User hasn't voted yet, which is expected
@@ -185,7 +188,7 @@ const Voter = () => {
     };
 
     checkVoteStatus();
-  }, [selectedSession, user, walletAddress, toast]);
+  }, [selectedSession, user?.id, walletAddress, toast]);
 
   const handleConnectWallet = async () => {
     try {
@@ -230,11 +233,11 @@ const Voter = () => {
       }
       
       // Validate ID against database if required
-      if (requiresVerification) {
+      if (requiresVerification && currentSession?.id_verification_type) {
         const { data: authorizedId } = await supabase
           .from('authorized_ids')
           .select('id')
-          .eq('id_type', currentSession.id_verification_type)
+          .eq('id_type', currentSession.id_verification_type as any)
           .eq('id_value', verificationId.trim())
           .eq('is_active', true)
           .single();
@@ -286,13 +289,15 @@ const Voter = () => {
     }
   };
 
-  const currentSession = sessions.find(s => s.id === selectedSession);
   const requiresVerification = currentSession?.id_verification_type && currentSession.id_verification_type !== 'custom';
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col items-center space-y-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="text-gray-600">Loading voting sessions...</p>
+        </div>
       </div>
     );
   }
@@ -478,17 +483,17 @@ const Voter = () => {
             <CardContent>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="verification-id">
-                    {currentSession.id_verification_type === 'employee' ? 'Employee ID' : 
-                     currentSession.id_verification_type === 'student' ? 'Student ID' : 
-                     'Staff ID'}
-                  </Label>
-                  <Input
-                    id="verification-id"
-                    placeholder={`Enter your ${currentSession.id_verification_type} ID`}
-                    value={verificationId}
-                    onChange={(e) => setVerificationId(e.target.value)}
-                  />
+                   <Label htmlFor="verification-id">
+                     {currentSession?.id_verification_type === 'employee' ? 'Employee ID' : 
+                      currentSession?.id_verification_type === 'student' ? 'Student ID' : 
+                      'Staff ID'}
+                   </Label>
+                   <Input
+                     id="verification-id"
+                     placeholder={`Enter your ${currentSession?.id_verification_type || 'ID'}`}
+                     value={verificationId}
+                     onChange={(e) => setVerificationId(e.target.value)}
+                   />
                 </div>
                 <p className="text-sm text-gray-600">
                   Your ID will be verified against the authorized database. Your identity remains anonymous in voting results.
@@ -534,7 +539,7 @@ const Voter = () => {
                 <ul className="text-sm text-blue-700 space-y-1">
                   <li>• You can only vote once per session</li>
                   <li>• Your vote is recorded on blockchain for transparency</li>
-                  <li>• Your identity {currentSession.voter_identity_visible ? 'may be visible' : 'remains anonymous'} in results</li>
+                  <li>• Your identity {currentSession?.voter_identity_visible ? 'may be visible' : 'remains anonymous'} in results</li>
                   <li>• Vote cannot be changed once submitted</li>
                   <li>• Voting is prevented across devices and browsers</li>
                 </ul>
