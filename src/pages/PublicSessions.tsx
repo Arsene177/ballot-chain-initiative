@@ -36,12 +36,12 @@ const PublicSessions = () => {
 
   const fetchPublicSessions = async () => {
     try {
-      // Fetch all public and active sessions
+      // Fetch all public sessions regardless of status, plus recently ended ones
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('voting_sessions')
         .select('*')
-        .in('status', ['active', 'ended'])
-        .order('created_at', { ascending: false });
+        .eq('access_type', 'public')
+        .order('start_time', { ascending: false });
 
       if (sessionsError) throw sessionsError;
 

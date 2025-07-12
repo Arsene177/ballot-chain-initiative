@@ -87,17 +87,30 @@ const Voter = () => {
     return () => clearInterval(interval);
   }, [currentSession?.id, currentSession?.end_time]);
 
-  // Fetch active voting sessions
+  // Fetch voting sessions - show all public sessions and user's own sessions
   useEffect(() => {
     const fetchSessions = async () => {
       try {
         const now = new Date().toISOString();
-        const { data, error } = await supabase
+        
+        // For public sessions, show all that haven't ended yet, regardless of status
+        // For authenticated users, also show their private/restricted sessions
+        let query = supabase
           .from('voting_sessions')
-          .select('id, title, description, start_time, end_time, status, id_verification_type, voter_identity_visible, access_type')
-          .in('status', ['active', 'scheduled'])
+          .select('id, title, description, start_time, end_time, status, id_verification_type, voter_identity_visible, access_type');
+
+        if (user) {
+          // Authenticated users see: public sessions + their own sessions + ongoing sessions
+          query = query.or(`access_type.eq.public,creator_id.eq.${user.id},and(status.eq.active,end_time.gte.${now})`);
+        } else {
+          // Anonymous users see only public sessions
+          query = query.eq('access_type', 'public');
+        }
+
+        // Show sessions that haven't ended yet
+        const { data, error } = await query
           .gte('end_time', now)
-          .order('created_at', { ascending: false });
+          .order('start_time', { ascending: true });
 
         if (error) throw error;
         setSessions(data || []);
@@ -114,7 +127,7 @@ const Voter = () => {
     };
 
     fetchSessions();
-  }, [toast]);
+  }, [toast, user?.id]);
 
   // Fetch candidates for selected session
   useEffect(() => {

@@ -1,14 +1,67 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Users, Vote, BarChart3, Lock, Eye } from 'lucide-react';
+import { Shield, Users, Vote, BarChart3, Lock, Eye, Calendar, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import UserMenu from '@/components/UserMenu';
+import { supabase } from '@/integrations/supabase/client';
+
+interface PublicSession {
+  id: string;
+  title: string;
+  description: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  access_type: string;
+}
 
 const Index = () => {
   const { user } = useAuth();
+  const [activeSessions, setActiveSessions] = useState<PublicSession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+
+  useEffect(() => {
+    const fetchActiveSessions = async () => {
+      try {
+        const now = new Date().toISOString();
+        const { data, error } = await supabase
+          .from('voting_sessions')
+          .select('id, title, description, start_time, end_time, status, access_type')
+          .eq('access_type', 'public')
+          .gte('end_time', now)
+          .lte('start_time', now)
+          .order('start_time', { ascending: true })
+          .limit(3);
+
+        if (error) throw error;
+        setActiveSessions(data || []);
+      } catch (error) {
+        console.error('Error fetching active sessions:', error);
+      } finally {
+        setLoadingSessions(false);
+      }
+    };
+
+    fetchActiveSessions();
+  }, []);
+
+  const getSessionStatus = (session: PublicSession) => {
+    const now = new Date();
+    const startTime = new Date(session.start_time);
+    const endTime = new Date(session.end_time);
+
+    if (now < startTime) {
+      return { status: 'upcoming', label: 'Upcoming', color: 'bg-blue-100 text-blue-700' };
+    } else if (now >= startTime && now <= endTime) {
+      return { status: 'ongoing', label: 'Live Now', color: 'bg-green-100 text-green-700' };
+    } else {
+      return { status: 'ended', label: 'Ended', color: 'bg-gray-100 text-gray-700' };
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -101,6 +154,54 @@ const Index = () => {
             )}
           </div>
         </div>
+
+        {/* Active Sessions Preview */}
+        {!loadingSessions && activeSessions.length > 0 && (
+          <div className="mt-20">
+            <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">
+              Live Voting Sessions
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {activeSessions.map((session) => {
+                const sessionStatus = getSessionStatus(session);
+                return (
+                  <Card key={session.id} className="hover:shadow-lg transition-shadow border-blue-200">
+                    <CardHeader>
+                      <div className="flex justify-between items-start mb-2">
+                        <Badge className={sessionStatus.color}>
+                          {sessionStatus.label}
+                        </Badge>
+                        <Eye className="h-4 w-4 text-green-600" />
+                      </div>
+                      <CardTitle className="text-lg">{session.title}</CardTitle>
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {session.description}
+                      </p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center space-x-2 text-sm text-gray-600 mb-3">
+                        <Calendar className="h-4 w-4" />
+                        <span>Ends: {new Date(session.end_time).toLocaleDateString()}</span>
+                      </div>
+                      <Link to={user ? "/voter" : "/sessions"} className="block">
+                        <Button className="w-full" size="sm">
+                          {sessionStatus.status === 'ongoing' ? 'Vote Now' : 'View Details'}
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+            <div className="text-center">
+              <Link to="/sessions">
+                <Button variant="outline" size="lg">
+                  View All Public Sessions
+                </Button>
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Features Grid */}
         <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8">
