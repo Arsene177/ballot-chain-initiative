@@ -95,7 +95,8 @@ const Voter = () => {
         const { data, error } = await supabase
           .from('voting_sessions')
           .select('id, title, description, start_time, end_time, status, id_verification_type, voter_identity_visible, access_type')
-          .or(`status.eq.active,and(status.eq.scheduled,start_time.lte.${now},end_time.gte.${now})`)
+          .in('status', ['active', 'scheduled'])
+          .gte('end_time', now)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
