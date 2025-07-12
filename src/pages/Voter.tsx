@@ -51,6 +51,9 @@ const Voter = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  // Calculate current session - must be declared before useEffect hooks
+  const currentSession = sessions.find(s => s.id === selectedSession);
+
   // Update time remaining every minute
   useEffect(() => {
     const updateTimeRemaining = () => {
@@ -286,7 +289,6 @@ const Voter = () => {
     }
   };
 
-  const currentSession = sessions.find(s => s.id === selectedSession);
   const requiresVerification = currentSession?.id_verification_type && currentSession.id_verification_type !== 'custom';
 
   if (loading) {
