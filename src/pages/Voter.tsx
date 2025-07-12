@@ -19,6 +19,7 @@ interface VotingSession {
   id: string;
   title: string;
   description: string;
+  start_time: string;
   end_time: string;
   status: string;
   id_verification_type: string;
@@ -90,10 +91,11 @@ const Voter = () => {
   useEffect(() => {
     const fetchSessions = async () => {
       try {
+        const now = new Date().toISOString();
         const { data, error } = await supabase
           .from('voting_sessions')
-          .select('id, title, description, end_time, status, id_verification_type, voter_identity_visible, access_type')
-          .eq('status', 'active')
+          .select('id, title, description, start_time, end_time, status, id_verification_type, voter_identity_visible, access_type')
+          .or(`status.eq.active,and(status.eq.scheduled,start_time.lte.${now},end_time.gte.${now})`)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
