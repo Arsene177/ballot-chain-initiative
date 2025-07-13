@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Calendar, Users, Clock, CheckCircle, XCircle, Eye } from 'lucide-react';
+import { Shield, Calendar, Users, Clock, CheckCircle, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { getSessionStatus, getTimeRemaining } from '@/lib/session-utils';
 
 interface PublicSession {
   id: string;
@@ -97,34 +98,12 @@ const PublicSessions = () => {
     }
   };
 
-  const getSessionStatus = (session: PublicSession) => {
-    const now = new Date();
-    const startTime = new Date(session.start_time);
-    const endTime = new Date(session.end_time);
-
-    if (now < startTime) {
-      return { status: 'upcoming', label: 'Upcoming', color: 'bg-blue-100 text-blue-700' };
-    } else if (now >= startTime && now <= endTime) {
-      return { status: 'ongoing', label: 'Ongoing', color: 'bg-green-100 text-green-700' };
-    } else {
-      return { status: 'ended', label: 'Ended', color: 'bg-gray-100 text-gray-700' };
-    }
+  const getPublicSessionStatus = (session: PublicSession) => {
+    return getSessionStatus(session.start_time, session.end_time);
   };
 
-  const getTimeRemaining = (endTime: string) => {
-    const now = new Date();
-    const end = new Date(endTime);
-    const diff = end.getTime() - now.getTime();
-
-    if (diff <= 0) return 'Ended';
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (days > 0) return `${days}d ${hours}h remaining`;
-    if (hours > 0) return `${hours}h ${minutes}m remaining`;
-    return `${minutes}m remaining`;
+  const getTimeRemainingForSession = (endTime: string) => {
+    return getTimeRemaining(endTime);
   };
 
   if (loading) {
@@ -190,8 +169,8 @@ const PublicSessions = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sessions.map((session) => {
-              const sessionStatus = getSessionStatus(session);
-              const timeRemaining = getTimeRemaining(session.end_time);
+              const sessionStatus = getPublicSessionStatus(session);
+              const timeRemaining = getTimeRemainingForSession(session.end_time);
 
               return (
                 <Card key={session.id} className="hover:shadow-lg transition-shadow">
@@ -256,7 +235,7 @@ const PublicSessions = () => {
 
                     {/* Action Button */}
                     <div className="pt-2">
-                      {sessionStatus.status === 'ongoing' ? (
+                      {sessionStatus.canVote ? (
                         <Link to={user ? "/voter" : "/auth"} className="block">
                           <Button className="w-full">
                             {user ? 'Vote Now' : 'Sign In to Vote'}

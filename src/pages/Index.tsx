@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import UserMenu from '@/components/UserMenu';
 import { supabase } from '@/integrations/supabase/client';
+import { getSessionStatus } from '@/lib/session-utils';
 
 interface PublicSession {
   id: string;
@@ -49,18 +50,8 @@ const Index = () => {
     fetchActiveSessions();
   }, []);
 
-  const getSessionStatus = (session: PublicSession) => {
-    const now = new Date();
-    const startTime = new Date(session.start_time);
-    const endTime = new Date(session.end_time);
-
-    if (now < startTime) {
-      return { status: 'upcoming', label: 'Upcoming', color: 'bg-blue-100 text-blue-700' };
-    } else if (now >= startTime && now <= endTime) {
-      return { status: 'ongoing', label: 'Live Now', color: 'bg-green-100 text-green-700' };
-    } else {
-      return { status: 'ended', label: 'Ended', color: 'bg-gray-100 text-gray-700' };
-    }
+  const getSessionStatusForIndex = (session: PublicSession) => {
+    return getSessionStatus(session.start_time, session.end_time);
   };
 
   return (
@@ -163,7 +154,7 @@ const Index = () => {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {activeSessions.map((session) => {
-                const sessionStatus = getSessionStatus(session);
+                const sessionStatus = getSessionStatusForIndex(session);
                 return (
                   <Card key={session.id} className="hover:shadow-lg transition-shadow border-blue-200">
                     <CardHeader>
@@ -185,7 +176,7 @@ const Index = () => {
                       </div>
                       <Link to={user ? "/voter" : "/sessions"} className="block">
                         <Button className="w-full" size="sm">
-                          {sessionStatus.status === 'ongoing' ? 'Vote Now' : 'View Details'}
+                          {sessionStatus.canVote ? 'Vote Now' : 'View Details'}
                         </Button>
                       </Link>
                     </CardContent>

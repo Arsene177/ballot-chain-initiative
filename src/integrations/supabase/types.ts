@@ -237,10 +237,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      update_voting_session_statuses: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      [_ in never]: never
     }
     Enums: {
       id_verification_type: "employee" | "student" | "staff" | "custom"
