@@ -70,11 +70,16 @@ export class BlockchainService {
 
   async hasVoted(sessionId: string, voterAddress: string): Promise<boolean> {
     try {
-      if (!this.contract) return false;
+      // Check database for existing votes with this wallet address and session
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('voting_session_id', sessionId)
+        .eq('voter_wallet_address', voterAddress)
+        .maybeSingle();
       
-      // For demo purposes, simulate that no one has voted yet
-      // In a real implementation, this would call the actual contract
-      return false;
+      return !!data;
     } catch (error) {
       console.error('Error checking vote status:', error);
       return false;
