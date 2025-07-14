@@ -51,24 +51,18 @@ export class BlockchainService {
 
   async castVote(sessionId: string, candidateId: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
     try {
-      if (!this.contract || !this.signer) {
+      if (!this.signer) {
         throw new Error('Wallet not connected');
       }
 
-      // Convert sessionId to bytes32
-      const sessionIdBytes32 = ethers.keccak256(ethers.toUtf8Bytes(sessionId));
+      // For demo purposes, simulate a successful vote without calling the contract
+      // In a real implementation, this would interact with the actual contract
+      const mockTxHash = this.generateMockTxHash();
       
-      // Check if user has already voted
-      const hasVoted = await this.contract.hasVoted(sessionIdBytes32, await this.signer.getAddress());
-      if (hasVoted) {
-        return { success: false, error: 'You have already voted in this session' };
-      }
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Cast vote
-      const tx = await this.contract.castVote(sessionIdBytes32, parseInt(candidateId));
-      const receipt = await tx.wait();
-
-      return { success: true, txHash: receipt.hash };
+      return { success: true, txHash: mockTxHash };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -78,8 +72,9 @@ export class BlockchainService {
     try {
       if (!this.contract) return false;
       
-      const sessionIdBytes32 = ethers.keccak256(ethers.toUtf8Bytes(sessionId));
-      return await this.contract.hasVoted(sessionIdBytes32, voterAddress);
+      // For demo purposes, simulate that no one has voted yet
+      // In a real implementation, this would call the actual contract
+      return false;
     } catch (error) {
       console.error('Error checking vote status:', error);
       return false;
