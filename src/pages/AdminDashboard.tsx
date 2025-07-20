@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
 
 const AdminDashboard = () => {
   const { toast } = useToast();
@@ -21,6 +22,12 @@ const AdminDashboard = () => {
     activeParticipants: 0,
     blockchainConfirmations: 99.9
   });
+  const [manualId, setManualId] = useState({
+    id_type: 'employee',
+    id_value: '',
+    organization_id: ''
+  });
+  const [addingId, setAddingId] = useState(false);
 
   React.useEffect(() => {
     fetchStats();
@@ -187,6 +194,34 @@ const AdminDashboard = () => {
         description: "Failed to export ID database",
         variant: "destructive",
       });
+    }
+  };
+
+  // Handler to add ID manually
+  const handleAddId = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddingId(true);
+    try {
+      if (!manualId.id_value.trim()) {
+        toast({ title: 'Validation Error', description: 'ID value is required', variant: 'destructive' });
+        setAddingId(false);
+        return;
+      }
+      const { error } = await supabase.from('authorized_ids').insert([
+        {
+          id_type: manualId.id_type,
+          id_value: manualId.id_value.trim(),
+          organization_id: manualId.organization_id.trim() || null,
+          is_active: true
+        }
+      ]);
+      if (error) throw error;
+      toast({ title: 'ID Added', description: 'Authorized ID added successfully.' });
+      setManualId({ id_type: 'employee', id_value: '', organization_id: '' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to add ID', variant: 'destructive' });
+    } finally {
+      setAddingId(false);
     }
   };
   return (
@@ -388,6 +423,55 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Add Authorized ID Manually */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Add Authorized ID Manually</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAddId} className="space-y-4">
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <Label htmlFor="id_type">ID Type</Label>
+                  <select
+                    id="id_type"
+                    className="w-full border rounded px-2 py-1"
+                    value={manualId.id_type}
+                    onChange={e => setManualId({ ...manualId, id_type: e.target.value })}
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="student">Student</option>
+                    <option value="staff">Staff</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="id_value">ID Value</Label>
+                  <Input
+                    id="id_value"
+                    value={manualId.id_value}
+                    onChange={e => setManualId({ ...manualId, id_value: e.target.value })}
+                    placeholder="Enter ID value"
+                    required
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="organization_id">Organization ID (optional)</Label>
+                  <Input
+                    id="organization_id"
+                    value={manualId.organization_id}
+                    onChange={e => setManualId({ ...manualId, organization_id: e.target.value })}
+                    placeholder="Org ID"
+                  />
+                </div>
+              </div>
+              <Button type="submit" disabled={addingId} className="mt-2">
+                {addingId ? 'Adding...' : 'Add ID'}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 
