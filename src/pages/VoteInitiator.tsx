@@ -14,6 +14,8 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { blockchainService } from '@/lib/blockchain';
+import { ethers } from 'ethers';
 
 interface VotingSessionForm {
   title: string;
@@ -135,7 +137,11 @@ const UserVotingSessions = () => {
                 </span>
               </div>
             </div>
-            <Button className="w-full mt-4" size="sm">
+            <Button
+              className="w-full mt-4"
+              size="sm"
+              onClick={() => handleViewResults(session.id, candidates)}
+            >
               <BarChart3 className="h-4 w-4 mr-2" />
               View Results
             </Button>
@@ -315,6 +321,26 @@ const VoteInitiator = () => {
 
   const handleCreateSession = () => createVotingSession(false);
   const handleSaveDraft = () => createVotingSession(true);
+
+  const handleViewResults = async (sessionId: string, candidates: any[]) => {
+    console.log('handleViewResults called', { sessionId, candidates });
+    alert('handleViewResults called for session: ' + sessionId + '\nCandidates: ' + candidates.map(c => c.name).join(', '));
+    try {
+      if (!blockchainService.contract) {
+        alert('Blockchain not connected. Please connect your wallet first.');
+        return;
+      }
+      const sessionIdBytes = ethers.id(sessionId); // ethers v6: keccak256 hash
+      const results = [];
+      for (const candidate of candidates) {
+        const count = await blockchainService.contract.getVoteCount(sessionIdBytes, candidate.id);
+        results.push(`${candidate.name}: ${count.toString()} votes`);
+      }
+      alert('Results for session ' + sessionId + '\n' + results.join('\n'));
+    } catch (err: any) {
+      alert('Error fetching results: ' + (err.message || err));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">

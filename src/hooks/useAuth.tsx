@@ -42,7 +42,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -53,8 +52,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       }
     });
-    
-    return { error };
+    if (error) {
+      if (
+        error.message.toLowerCase().includes('already registered') ||
+        error.message.toLowerCase().includes('user already exists') ||
+        error.message.toLowerCase().includes('user already registered')
+      ) {
+        return { error: 'An account with this email already exists. Please sign in.' };
+      }
+      return { error: error.message };
+    }
+    return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {

@@ -1,16 +1,57 @@
 // Blockchain integration utilities
 import { ethers } from 'ethers';
 
-// Mock contract ABI for voting
+// Voting contract ABI (from Voting-abi.json)
 const VOTING_CONTRACT_ABI = [
-  "function castVote(bytes32 sessionId, uint256 candidateId) external",
-  "function hasVoted(bytes32 sessionId, address voter) external view returns (bool)",
-  "function getVoteCount(bytes32 sessionId, uint256 candidateId) external view returns (uint256)",
-  "event VoteCast(bytes32 indexed sessionId, address indexed voter, uint256 candidateId, uint256 timestamp)"
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "bytes32", "name": "sessionId", "type": "bytes32" },
+      { "indexed": true, "internalType": "address", "name": "voter", "type": "address" },
+      { "indexed": false, "internalType": "uint256", "name": "candidateId", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "VoteCast",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "sessionId", "type": "bytes32" },
+      { "internalType": "uint256", "name": "candidateId", "type": "uint256" }
+    ],
+    "name": "castVote",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "sessionId", "type": "bytes32" },
+      { "internalType": "uint256", "name": "candidateId", "type": "uint256" }
+    ],
+    "name": "getVoteCount",
+    "outputs": [
+      { "internalType": "uint256", "name": "", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "sessionId", "type": "bytes32" },
+      { "internalType": "address", "name": "voter", "type": "address" }
+    ],
+    "name": "hasVoted",
+    "outputs": [
+      { "internalType": "bool", "name": "", "type": "bool" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
 ];
 
-// Mock contract address (replace with actual deployed contract)
-const VOTING_CONTRACT_ADDRESS = "0x1234567890123456789012345678901234567890";
+// Deployed Voting contract address on Sepolia
+const VOTING_CONTRACT_ADDRESS = "0xC27C0Fd868Bb3E4434cd3F902729f9e3dD85695d";
 
 export interface BlockchainVote {
   sessionId: string;
@@ -27,16 +68,37 @@ export class BlockchainService {
   private contract: ethers.Contract | null = null;
 
   async connectWallet(): Promise<{ address: string; success: boolean; error?: string }> {
-    try {
-      if (!(window as any).ethereum) {
-        return { address: '', success: false, error: 'MetaMask not installed' };
+    // Robust MetaMask detection
+    function isMetaMaskInstalled() {
+      return typeof window !== 'undefined' && !!(window as any).ethereum && (window as any).ethereum.isMetaMask;
+    }
+    if (!isMetaMaskInstalled()) {
+      // Try again after a short delay in case of late injection
+      await new Promise(res => setTimeout(res, 500));
+      if (!isMetaMaskInstalled()) {
+        return {
+          address: '',
+          success: false,
+          error: 'MetaMask is not detected. Please ensure MetaMask is installed and enabled, then refresh the page. If you just installed it, close and reopen your browser.'
+        };
       }
-
+    }
+    try {
       this.provider = new ethers.BrowserProvider((window as any).ethereum);
       await this.provider.send("eth_requestAccounts", []);
       this.signer = await this.provider.getSigner();
       const address = await this.signer.getAddress();
-      
+
+      // Check if MetaMask is on Sepolia
+      const network = await this.provider.getNetwork();
+      if (network.chainId !== 11155111n) {
+        // Prompt user to switch to Sepolia
+        await (window as any).ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xAA36A7' }], // 11155111 in hex
+        });
+      }
+
       this.contract = new ethers.Contract(
         VOTING_CONTRACT_ADDRESS,
         VOTING_CONTRACT_ABI,
@@ -51,18 +113,17 @@ export class BlockchainService {
 
   async castVote(sessionId: string, candidateId: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
     try {
-      if (!this.signer) {
-        throw new Error('Wallet not connected');
+      if (!this.contract) {
+        throw new Error('Contract not initialized');
       }
-
-      // For demo purposes, simulate a successful vote without calling the contract
-      // In a real implementation, this would interact with the actual contract
-      const mockTxHash = this.generateMockTxHash();
-      
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      return { success: true, txHash: mockTxHash };
+      const candidateIdNum = parseInt(candidateId);
+      if (isNaN(candidateIdNum)) {
+        throw new Error('Invalid candidate selected');
+      }
+      const sessionIdBytes = ethers.id(sessionId);
+      const tx = await this.contract.castVote(sessionIdBytes, candidateIdNum);
+      await tx.wait();
+      return { success: true, txHash: tx.hash };
     } catch (error: any) {
       return { success: false, error: error.message };
     }

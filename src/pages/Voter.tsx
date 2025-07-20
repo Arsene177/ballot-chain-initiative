@@ -46,6 +46,8 @@ const Voter = () => {
   const [hasVoted, setHasVoted] = useState(false);
   const [transactionHash, setTransactionHash] = useState('');
   const [timeRemaining, setTimeRemaining] = useState('');
+  const [sessionIdInput, setSessionIdInput] = useState('');
+  const [joinError, setJoinError] = useState('');
 
   const [sessions, setSessions] = useState<VotingSession[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -234,11 +236,21 @@ const Voter = () => {
 
   const handleVote = async () => {
     if (!selectedCandidate || !selectedSession || !user || !walletAddress) return;
-
     setSubmitting(true);
     try {
-      // Validate ID if required
-      if (requiresVerification && !verificationId.trim()) {
+      // Find the candidate index for the contract call
+      const candidateIndex = candidates.findIndex(c => c.id === selectedCandidate);
+      if (candidateIndex === -1) {
+        throw new Error('Invalid candidate selected');
+      }
+      
+      // Validate ID if required (check currentSession directly)
+      if (
+        currentSession &&
+        currentSession.access_type !== 'public' &&
+        currentSession.id_verification_type !== 'custom' &&
+        !verificationId.trim()
+      ) {
         throw new Error('ID verification is required for this session');
       }
       
@@ -249,7 +261,12 @@ const Voter = () => {
       }
       
       // Validate ID against database if required
-      if (requiresVerification && currentSession?.id_verification_type) {
+      if (
+        currentSession &&
+        currentSession.access_type !== 'public' &&
+        currentSession.id_verification_type !== 'custom' &&
+        currentSession.id_verification_type
+      ) {
         const { data: authorizedId } = await supabase
           .from('authorized_ids')
           .select('id')
@@ -257,14 +274,13 @@ const Voter = () => {
           .eq('id_value', verificationId.trim())
           .eq('is_active', true)
           .single();
-          
         if (!authorizedId) {
           throw new Error('Invalid or unauthorized ID');
         }
       }
 
       // Cast vote on blockchain
-      const blockchainResult = await blockchainService.castVote(selectedSession, selectedCandidate);
+      const blockchainResult = await blockchainService.castVote(selectedSession, String(candidateIndex));
       if (!blockchainResult.success) {
         throw new Error(blockchainResult.error || 'Blockchain vote failed');
       }
@@ -306,6 +322,31 @@ const Voter = () => {
   };
 
   const requiresVerification = currentSession?.id_verification_type && currentSession.id_verification_type !== 'custom';
+
+  // Add a handler to join a session by ID
+  const handleJoinSession = async () => {
+    setJoinError('');
+    setLoading(true);
+    try {
+      const { data: session, error } = await supabase
+        .from('voting_sessions')
+        .select('id, title, description, start_time, end_time, status, id_verification_type, voter_identity_visible, access_type')
+        .eq('id', sessionIdInput)
+        .maybeSingle();
+      if (error || !session) {
+        setJoinError('Session not found. Please check the session ID.');
+        setLoading(false);
+        return;
+      }
+      setSessions([session]);
+      setSelectedSession(session.id);
+      setJoinError('');
+    } catch (err) {
+      setJoinError('Error searching for session.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -488,7 +529,7 @@ const Voter = () => {
         )}
 
         {/* ID Verification */}
-        {isConnected && requiresVerification && (
+        {isConnected && currentSession?.access_type !== 'public' && requiresVerification && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -519,8 +560,20 @@ const Voter = () => {
           </Card>
         )}
 
+        {/* Debug Card: Show all conditions for vote button */}
+        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+          <div className="font-bold mb-2">Debug Info (for Vote Button):</div>
+          <div>isConnected: {String(isConnected)}</div>
+          <div>candidates.length: {candidates.length}</div>
+          <div>requiresVerification: {String(requiresVerification)}</div>
+          <div>verificationId: {verificationId}</div>
+          <div>currentSession?.id: {currentSession?.id}</div>
+          <div>timeRemaining: {timeRemaining}</div>
+          <div>hasVoted: {String(hasVoted)}</div>
+        </div>
+
         {/* Voting Interface */}
-        {isConnected && (!requiresVerification || verificationId) && candidates.length > 0 && (
+        {isConnected && candidates.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -592,6 +645,22 @@ const Voter = () => {
             </AlertDescription>
           </Alert>
         )}
+
+        {/* Session ID Input and Join Button */}
+        <div className="mt-6">
+          <Label htmlFor="sessionIdInput">Enter Session ID to Join a Private/Restricted Session</Label>
+          <div className="flex gap-2 mt-2">
+            <Input
+              id="sessionIdInput"
+              value={sessionIdInput}
+              onChange={e => setSessionIdInput(e.target.value)}
+              placeholder="Session ID"
+              className="w-64"
+            />
+            <Button onClick={handleJoinSession}>Join Session</Button>
+          </div>
+          {joinError && <Alert variant="destructive" className="mt-2"><AlertDescription>{joinError}</AlertDescription></Alert>}
+        </div>
       </div>
     </div>
   );

@@ -222,8 +222,6 @@ const AdminDashboard = () => {
                 <Vote className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">1,247</div>
-                <p className="text-xs text-muted-foreground">+12% from last month</p>
                 <div className="text-2xl font-bold">{stats.totalSessions}</div>
                 <p className="text-xs text-muted-foreground">
                   {stats.totalSessions > 0 ? '+12% from last month' : 'No sessions yet'}
@@ -237,8 +235,6 @@ const AdminDashboard = () => {
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">45,231</div>
-                <p className="text-xs text-muted-foreground">+8% from last month</p>
                 <div className="text-2xl font-bold">{stats.totalVotes.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">
                   {stats.totalVotes > 0 ? '+8% from last month' : 'No votes cast yet'}
@@ -252,8 +248,6 @@ const AdminDashboard = () => {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">12,847</div>
-                <p className="text-xs text-muted-foreground">+15% from last month</p>
                 <div className="text-2xl font-bold">{stats.activeParticipants.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground">
                   {stats.activeParticipants > 0 ? '+15% from last month' : 'No participants yet'}
@@ -267,8 +261,6 @@ const AdminDashboard = () => {
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">99.9%</div>
-                <p className="text-xs text-muted-foreground">System reliability</p>
                 <div className="text-2xl font-bold">{stats.blockchainConfirmations}%</div>
                 <p className="text-xs text-muted-foreground">System reliability</p>
               </CardContent>
