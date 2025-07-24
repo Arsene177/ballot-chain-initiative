@@ -11,9 +11,11 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 const AdminDashboard = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [voterVisibility, setVoterVisibility] = React.useState(false);
   const [uploadFile, setUploadFile] = React.useState<File | null>(null);
   const [stats, setStats] = React.useState({
@@ -74,7 +76,11 @@ const AdminDashboard = () => {
         .single();
 
       if (data) {
-        setVoterVisibility(data.setting_value === 'true');
+        // Handle both boolean and string values from JSONB
+        const value = typeof data.setting_value === 'boolean' 
+          ? data.setting_value 
+          : data.setting_value === 'true';
+        setVoterVisibility(value);
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -87,7 +93,8 @@ const AdminDashboard = () => {
         .from('system_settings')
         .upsert({
           setting_key: 'voter_identity_visible',
-          setting_value: visible.toString()
+          setting_value: visible, // Store as boolean, not string
+          updated_by: user?.id
         });
 
       if (error) throw error;
@@ -97,10 +104,11 @@ const AdminDashboard = () => {
         title: "Settings Updated",
         description: `Voter identity visibility ${visible ? 'enabled' : 'disabled'}`,
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Settings update error:', error);
       toast({
         title: "Error",
-        description: "Failed to update settings",
+        description: error.message || "Failed to update settings",
         variant: "destructive",
       });
     }
