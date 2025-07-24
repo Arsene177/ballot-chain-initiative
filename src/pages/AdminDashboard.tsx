@@ -91,11 +91,17 @@ const AdminDashboard = () => {
     try {
       const { error } = await supabase
         .from('system_settings')
-        .upsert({
-          setting_key: 'voter_identity_visible',
-          setting_value: visible, // Store as boolean, not string
-          updated_by: user?.id
-        });
+        .upsert(
+          {
+            setting_key: 'voter_identity_visible',
+            setting_value: visible,
+            updated_by: user?.id
+          },
+          { 
+            onConflict: 'setting_key',
+            ignoreDuplicates: false 
+          }
+        );
 
       if (error) throw error;
 
