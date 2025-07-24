@@ -39,6 +39,7 @@ interface UserSession {
 
 const UserVotingSessions = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
@@ -140,7 +141,7 @@ const UserVotingSessions = () => {
             <Button
               className="w-full mt-4"
               size="sm"
-              onClick={() => handleViewResults(session.id, candidates)}
+              onClick={() => navigate('/sessions')}
             >
               <BarChart3 className="h-4 w-4 mr-2" />
               View Results
@@ -326,14 +327,13 @@ const VoteInitiator = () => {
     console.log('handleViewResults called', { sessionId, candidates });
     alert('handleViewResults called for session: ' + sessionId + '\nCandidates: ' + candidates.map(c => c.name).join(', '));
     try {
-      if (!blockchainService.contract) {
+      if (!blockchainService.isConnected) {
         alert('Blockchain not connected. Please connect your wallet first.');
         return;
       }
-      const sessionIdBytes = ethers.id(sessionId); // ethers v6: keccak256 hash
       const results = [];
       for (const candidate of candidates) {
-        const count = await blockchainService.contract.getVoteCount(sessionIdBytes, candidate.id);
+        const count = await blockchainService.getVoteCount(sessionId, candidate.id);
         results.push(`${candidate.name}: ${count.toString()} votes`);
       }
       alert('Results for session ' + sessionId + '\n' + results.join('\n'));

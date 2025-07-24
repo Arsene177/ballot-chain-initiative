@@ -207,14 +207,12 @@ const AdminDashboard = () => {
         setAddingId(false);
         return;
       }
-      const { error } = await supabase.from('authorized_ids').insert([
-        {
-          id_type: manualId.id_type,
-          id_value: manualId.id_value.trim(),
-          organization_id: manualId.organization_id.trim() || null,
-          is_active: true
-        }
-      ]);
+      const { error } = await supabase.from('authorized_ids').insert({
+        id_type: manualId.id_type as 'employee' | 'student' | 'staff' | 'custom',
+        id_value: manualId.id_value.trim(),
+        organization_id: manualId.organization_id.trim() || null,
+        is_active: true
+      });
       if (error) throw error;
       toast({ title: 'ID Added', description: 'Authorized ID added successfully.' });
       setManualId({ id_type: 'employee', id_value: '', organization_id: '' });
@@ -313,7 +311,7 @@ const AdminDashboard = () => {
                 <span>Privacy Controls</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 relative z-10">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium">Voter Identity Visibility</h4>
@@ -321,10 +319,13 @@ const AdminDashboard = () => {
                     Allow vote initiators to see voter identities
                   </p>
                 </div>
-                <Switch 
-                  checked={voterVisibility}
-                  onCheckedChange={updateVoterVisibility}
-                />
+                <div className="relative z-20" style={{ pointerEvents: 'auto' }}>
+                  <Switch 
+                    checked={voterVisibility}
+                    onCheckedChange={updateVoterVisibility}
+                    className="pointer-events-auto"
+                  />
+                </div>
               </div>
               <div className="pt-4 border-t">
                 <p className="text-xs text-gray-500">
